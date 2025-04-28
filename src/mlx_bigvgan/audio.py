@@ -61,6 +61,7 @@ def load_audio_sf(audio_path: str, sample_rate: int = 24000) -> mx.array:
         samples = resample_audio(samples, orig_sample_rate, sample_rate)
     audio = mx.array(samples, dtype=mx.float32)
     return audio
+
 def resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
     from scipy import signal
     gcd = np.gcd(orig_sr, target_sr)
@@ -69,7 +70,7 @@ def resample_audio(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarra
     resampled = signal.resample_poly(audio, up, down, padtype="edge")
     return resampled
 
-def load_audio(file: str = Optional[str], sr: int = 24000, from_stdin=False):
+def load_audio(file: str = Optional[str], sr: int = 24000):
     """
     Open an audio file and read as mono waveform, resampling as necessary
 
@@ -85,13 +86,7 @@ def load_audio(file: str = Optional[str], sr: int = 24000, from_stdin=False):
     -------
     A NumPy array containing the audio waveform, in float32 dtype.
     """
-
-    # This launches a subprocess to decode audio while down-mixing
-    # and resampling as necessary. Requires the ffmpeg CLI in PATH.
-    if from_stdin:
-        cmd = ["ffmpeg", "-i", "pipe:0"]
-    else:
-        cmd = ["ffmpeg", "-nostdin", "-i", file]
+    cmd = ["ffmpeg", "-nostdin", "-i", file]
 
     # fmt: off
     cmd.extend([
@@ -105,10 +100,11 @@ def load_audio(file: str = Optional[str], sr: int = 24000, from_stdin=False):
     # fmt: on
     try:
         out = run(cmd, capture_output=True, check=True).stdout
+        return mx.array(np.frombuffer(out, np.int16)).flatten().astype(mx.float32) / 32768.0
     except CalledProcessError as e:
-        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
-
-    return mx.array(np.frombuffer(out, np.int16)).flatten().astype(mx.float32) / 32768.0
+        print(f"Error loading audio file {file} by ffmpeg: {e}")
+        print("Trying loading by soundfile...")
+        return load_audio_sf(file, sr)
 
 
 @lru_cache(maxsize=None)
