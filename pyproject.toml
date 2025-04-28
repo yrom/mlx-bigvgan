@@ -1,0 +1,23 @@
+[project]
+name = "mlx-bigvgan"
+version = "0.1.0"
+description = "MLX implementation of BigVGAN"
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["MLX", "BigVGAN"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
+authors = [
+    { name = "Yrom", email = "yrom@qq.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "mlx>=0.22.1",
+    "numpy>=1.26.4",
+    "matplotlib",
+    "huggingface-hub>=0.30.2",
+    "torch>=2.7.0",
+    "soundfile>=0.13.1",
+]
