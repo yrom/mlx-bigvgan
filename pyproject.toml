@@ -15,11 +15,14 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "mlx>=0.22.1",
-    "numpy>=1.26.4",
+    "numpy",
     "matplotlib",
-    "huggingface-hub>=0.30.2",
-    "torch>=2.7.0",
-    "soundfile>=0.13.1",
+    "huggingface-hub",
+    "torch>=2.2.0",
+    "soundfile",
 ]
+
+[project.optional-dependencies]
+test = ["librosa","torchaudio"]
 [project.scripts]
 convert_mlx_bigvgan = "mlx_bigvgan.convert:main"
