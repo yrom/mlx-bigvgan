@@ -38,7 +38,7 @@ class UpSample1d(nn.Module):
         self.pad = self.kernel_size // ratio - 1
         self.pad_left = self.pad * self.stride + (self.kernel_size - self.stride) // 2
         self.pad_right = self.pad * self.stride + (self.kernel_size - self.stride + 1) // 2
-        self._filter: mx.array = kaiser_sinc_filter1d(
+        self.filter: mx.array = kaiser_sinc_filter1d(
             cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size
         )
 
@@ -55,7 +55,7 @@ class UpSample1d(nn.Module):
         )
         print(x.shape)
         # [kernel_size] -> [C, kernel_size, C/groups (=1)]
-        filter = self._filter.reshape(1, self.kernel_size, 1)
+        filter = self.filter.reshape(1, self.kernel_size, 1)
         filter = mx.broadcast_to(filter, (C, self.kernel_size, 1))
 
         y = self.ratio * mx.conv_transpose1d(x, filter, stride=self.stride, groups=C)
@@ -142,7 +142,7 @@ class LowPassFilter1d(nn.Module):
         self.stride = stride
         self.padding = padding
         self.padding_mode = padding_mode
-        self._filter: mx.array = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
+        self.filter: mx.array = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
 
     # Input [B, C, T]
     def __call__(self, x: mx.array) -> mx.array:
@@ -151,7 +151,7 @@ class LowPassFilter1d(nn.Module):
 
         if self.padding:
             x = mx.pad(x, [(0, 0), (self.pad_left, self.pad_right), (0, 0)], mode=self.padding_mode)
-        filter = self._filter.reshape(1, self.kernel_size, 1)  # [1,kernel_size, 1]
+        filter = self.filter.reshape(1, self.kernel_size, 1)  # [1,kernel_size, 1]
         filter = mx.broadcast_to(filter, (C, self.kernel_size, 1))  # [C, kernel_size, C/groups (=1)]
         y = mx.conv1d(x, filter, stride=self.stride, groups=C)
         y = y.swapaxes(1, 2)  # to [B, C, T]

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Literal, Union
+from typing import Any, Dict, Literal, Union
 import mlx.nn as nn
 import mlx.core as mx
 
@@ -19,7 +19,7 @@ from .act import Snake, SnakeBeta
 
 
 @dataclass
-class BigVGANConfig:
+class ModelConfig:
     """
     Default configuration: nvidia/bigvgan_v2_24khz_100band_256x.
     Args:
@@ -47,14 +47,13 @@ class BigVGANConfig:
 class BigVGAN(nn.Module):
     """
     BigVGAN is a neural vocoder model that applies anti-aliased periodic activation for residual blocks (resblocks).
-    New in BigVGAN-v2: it can optionally use optimized CUDA kernels for AMP (anti-aliased multi-periodicity) blocks.
-
-    Args:
-        h (dict): Hyperparameters.
-
     """
 
-    def __init__(self, config):
+    def __init__(self, config: Union[ModelConfig, SimpleNamespace]):
+        """
+        Args:
+            config (ModelConfig | SimpleNamespace): Configuration object containing model parameters.
+        """
         super().__init__()
 
         self.num_kernels = len(config.resblock_kernel_sizes)
@@ -71,7 +70,7 @@ class BigVGAN(nn.Module):
 
         # Transposed conv-based upsamplers. does not apply anti-aliasing
         self.ups: list[nn.Module] = []  # num_upsamples
-        self.resblocks: list[list[Union[AMPBlock1, AMPBlock2]]] = []
+        self.resblocks: list[Union[AMPBlock1, AMPBlock2]] = []
         final_out_channels = 0
         for i, (u, k) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
             in_channels = config.upsample_initial_channel // (2**i)
@@ -87,14 +86,14 @@ class BigVGAN(nn.Module):
                 )
             )
             # Residual blocks using anti-aliased multi-periodicity composition modules (AMP)
-            self.resblocks.append(
+            self.resblocks.extend(
                 [
                     resblock_class(out_channels, k, tuple(d), config.activation, config.snake_logscale)
                     for k, d in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes)
                 ]  # num_kernels
             )
-            assert len(self.resblocks[-1]) == self.num_kernels
         assert len(self.ups) == self.num_upsamples
+        assert len(self.resblocks) == self.num_kernels * self.num_upsamples
         # Post-conv
         if config.activation == "snake":
             activation_post = Snake(final_out_channels, alpha_logscale=config.snake_logscale)
@@ -119,8 +118,8 @@ class BigVGAN(nn.Module):
         for i, upsample in enumerate(self.ups):
             # Upsampling
             x = upsample(x)
-            # AMP blocks
-            ampblocks = self.resblocks[i]
+            # AMP blocks (num_kernels per upsampled layer)
+            ampblocks = self.resblocks[i * self.num_kernels : (i + 1) * self.num_kernels]
 
             y = ampblocks[0](x)
             for resblock in ampblocks[1:]:
@@ -134,80 +133,43 @@ class BigVGAN(nn.Module):
 
         return x
 
-    # def remove_weight_norm(self):
-    #     try:
-    #         print("Removing weight norm...")
-    #         for l in self.ups:
-    #             for l_i in l:
-    #                 remove_weight_norm(l_i)
-    #         for l in self.resblocks:
-    #             l.remove_weight_norm()
-    #         remove_weight_norm(self.conv_pre)
-    #         remove_weight_norm(self.conv_post)
-    #     except ValueError:
-    #         print("[INFO] Model already removed weight norm. Skipping!")
-    #         pass
-
-    @classmethod
-    def sanitize(cls, weights):
-        replacement_patterns = [
-
-        ]
-        ignored_keys = [""]
-        def replace_key(key: str) -> str:
-            for old, new in replacement_patterns:
-                key = key.replace(old, new)
-            return key
-
-        weights = {replace_key(k): v for k, v in weights.items()}
-        for key in ignored_keys:
-            if key in weights:
-                del weights[key]
-        return weights
-
     @classmethod
     def from_pretrained(
-        cls, path_or_repo: str, local_files_only: bool = False, dtype: mx.Dtype = mx.float32
+        cls,
+        path_or_repo: str,
+        local_files_only: bool = False,
     ) -> "BigVGAN":
         """
         Load a pretrained BigVGAN model from a local path or Hugging Face Hub.
         Args:
-            path_or_repo (str): e.g. nvidia/bigvgan_v2_24khz_100band_256x
-            dtype (mx.Dtype): Data type for the model weights. Default is mx.float32.
+            path_or_repo (str): e.g. wryom/bigvgan_v2_24khz_100band_256x
         """
-        import torch
-        from huggingface_hub import hf_hub_download
+        from huggingface_hub import snapshot_download
+
         model_dir = Path(path_or_repo)
-        config_file = model_dir / "config.json"
-        if not config_file.exists():
-            config_file = Path(
-                hf_hub_download(
+        if not model_dir.exists():
+            if local_files_only:
+                raise FileNotFoundError(f"Model directory {model_dir} not found.")
+            print(f"Downloading model from huggingface {path_or_repo}")
+            model_dir = Path(
+                snapshot_download(
                     repo_id=path_or_repo,
-                    filename="config.json",
+                    allow_patterns=["*.json", "*.safetensors"],
                     local_files_only=local_files_only,
                 )
             )
+        if not model_dir.is_dir():
+            raise RuntimeError("Could not load model.")
 
-        with open(config_file, "r", encoding="utf-8") as f:
+        model_file = model_dir / "model.safetensors"
+        if not model_file.exists():
+            raise FileNotFoundError(f"Model file {model_file} not found.")
+        with open(model_dir / "config.json", "r", encoding="utf-8") as f:
             config = SimpleNamespace(**json.load(f))
 
         model = BigVGAN(config)
-
-        model_file = model_dir / "bigvgan_generator.pt"
-        if not model_file.exists():
-            print(f"Loading weights from huggingface {path_or_repo}")
-            model_file = Path(
-                hf_hub_download(
-                    repo_id=path_or_repo,
-                    filename="bigvgan_generator.pt",
-                    local_files_only=local_files_only,
-                )
-            )
-        weights = torch.load(model_file, map_location="cpu")
-        print(weights)
-        weights = cls.sanitize(weights)
-        weights = {k: v.astype(dtype) for k, v in weights.items()}
-        model.load_weights(list(weights.items()))
+        model.load_weights(str(model_file))
+        model.eval()
         return model
 
 
@@ -218,7 +180,6 @@ def get_padding(kernel_size, dilation=1):
 class AMPBlock1(nn.Module):
     """
     AMPBlock applies Snake / SnakeBeta activation functions with trainable parameters that control periodicity, defined for each layer.
-    AMPBlock1 has additional self.convs2 that contains additional Conv1d layers with a fixed dilation=1 followed by each layer in self.convs1
 
     Args:
         channels (int): Number of convolution channels.
@@ -247,7 +208,7 @@ class AMPBlock1(nn.Module):
             raise NotImplementedError(
                 "activation incorrectly specified. check the config file and look for 'activation'."
             )
-        self.blocks = [
+        self.layers = [
             nn.Sequential(
                 Activation1d(
                     activation=activation_class(channels, alpha_logscale=snake_logscale),
@@ -276,15 +237,8 @@ class AMPBlock1(nn.Module):
         ]
 
     def __call__(self, x):
-        # acts1, acts2 = self.activations[::2], self.activations[1::2]
-        # for c1, c2, a1, a2 in zip(self.convs1, self.convs2, acts1, acts2):
-        #     xt = a1(x)
-        #     xt = c1(xt)
-        #     xt = a2(xt)
-        #     xt = c2(xt)
-        #     x = xt + x
-        for b in self.blocks:
-            xt = b(x)
+        for layer in self.layers:
+            xt = layer(x)
             x = xt + x
         return x
 
@@ -295,7 +249,6 @@ class AMPBlock2(nn.Module):
     Unlike AMPBlock1, AMPBlock2 does not contain extra Conv1d layers with fixed dilation=1
 
     Args:
-        h (AttrDict): Hyperparameters.
         channels (int): Number of convolution channels.
         kernel_size (int): Size of the convolution kernel. Default is 3.
         dilation (tuple): Dilation rates for the convolutions. Each dilation layer has two convolutions. Default is (1, 3, 5).
@@ -324,7 +277,7 @@ class AMPBlock2(nn.Module):
                 "activation incorrectly specified. check the config file and look for 'activation'."
             )
 
-        self.blocks = [
+        self.layers = [
             nn.Sequential(
                 Activation1d(
                     activation=activation_class(channels, alpha_logscale=snake_logscale),
@@ -342,8 +295,8 @@ class AMPBlock2(nn.Module):
         ]
 
     def __call__(self, x):
-        for b in self.blocks:
-            xt = b(x)
+        for layer in self.layers:
+            xt = layer(x)
             x = xt + x
         return x
 
@@ -351,11 +304,12 @@ class AMPBlock2(nn.Module):
     #     for l in self.convs:
     #         remove_weight_norm(l)
 
+
 if __name__ == "__main__":
     # Example usage
-    config = BigVGANConfig()
+    config = ModelConfig()
     model = BigVGAN(config)
     print(model)
-    x = mx.random.normal(0, 1, (1, config.num_mels, 256)) 
+    x = mx.random.normal(0, 1, (1, config.num_mels, 256))
     output = model(x)
-    print(output.shape) 
+    print(output.shape)
