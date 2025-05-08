@@ -101,7 +101,13 @@ def save_config(
 
 def load_original_model(hf_repo: str) -> Tuple[SimpleNamespace, Dict[str, mx.array]]:
     """Load the original weights of BigVGAN from Hugging Face hub."""
-    import torch
+    try:
+        import torch
+    except ImportError:
+        raise ImportError(
+            "PyTorch is required to load the original BigVGAN model. "
+            "`pip install torch` before converting the model."
+        )
 
     config_file = Path(
         hf_hub_download(
@@ -212,9 +218,17 @@ def convert(
     save_weights(save_path, weights)
 
     save_config(vars(config), config_path=save_path / "config.json")
+    print(f"Model has been saved to {save_path}.")
+    print("To upload the model to Hugging Face hub, run:")
+    print("huggingface-cli login")
+    print("huggingface-cli repo create <your_repo_name>")
+    print(f"huggingface-cli upload --repo-type model <your_repo_name> {save_path}")
 
 
 def main():
+    r"""Script to convert BigVGAN torch weights to MLX format.
+    ``python -m mlx_bigvgan.convert --repo_id nvidia/bigvgan_v2_24khz_100band_256x --output_dir mlx_models``
+    """
     import argparse
 
     parser = argparse.ArgumentParser(description="Convert BigVGAN weights to MLX.")
@@ -225,16 +239,10 @@ def main():
         help="Hugging Face repo ID of the oringla bigvgan pytorch model.",
     )
     parser.add_argument(
-        "--upload",
-        action="store_true",
-        default=False,
-        help="Upload the weights to Hugging Face.",
-    )
-    parser.add_argument(
-        "--upload_repo",
+        "--output_dir",
         type=str,
-        default="",
-        help="Hugging Face repo ID to upload the converted model.",
+        default="mlx_models",
+        help="Output directory to save the converted model.",
     )
     parser.add_argument(
         "--dtype",
@@ -243,8 +251,14 @@ def main():
         default="float32",
         choices=["float32", "bfloat16", "float16"],
     )
+    # TODO: support quantization
+    # parser.add_argument(
+    #     "--quantize",
+    #     action="store_true",
+    #     help="Whether to quantize the model.",
+    # )
     args = parser.parse_args()
-    convert(hf_repo=args.repo_id, dtype=getattr(mx, args.dtype), upload_repo=args.upload_repo, upload=args.upload)
+    convert(hf_repo=args.repo_id, dtype=getattr(mx, args.dtype), output_dir=args.output_dir)
 
 
 if __name__ == "__main__":
