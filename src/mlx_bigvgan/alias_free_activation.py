@@ -20,12 +20,11 @@ class Activation1d(nn.Module):
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
 
-    # x: [B,C,T]
+    # x: [B,T,C]
     def __call__(self, x):
         x = self.upsample(x)
         x = self.act(x)
         x = self.downsample(x)
-
         return x
 
 
@@ -41,11 +40,10 @@ class UpSample1d(nn.Module):
         self.filter: mx.array = kaiser_sinc_filter1d(
             cutoff=0.5 / ratio, half_width=0.6 / ratio, kernel_size=self.kernel_size
         )
+        self.freeze(keys=["filter"])
 
-    # x: [B, C, T]
+    # x: [B,T,C]
     def __call__(self, x: mx.array) -> mx.array:
-        # [B, C, T] -> [B, T, C]
-        x = x.swapaxes(1, 2)
         C = x.shape[-1]
         # [B, T, C] -> [B, T + 2 * pad, C]
         x = mx.pad(
@@ -53,14 +51,12 @@ class UpSample1d(nn.Module):
             [(0, 0), (self.pad, self.pad), (0, 0)],
             mode="edge",
         )
-        print(x.shape)
         # [kernel_size] -> [C, kernel_size, C/groups (=1)]
         filter = self.filter.reshape(1, self.kernel_size, 1)
         filter = mx.broadcast_to(filter, (C, self.kernel_size, 1))
 
         y = self.ratio * mx.conv_transpose1d(x, filter, stride=self.stride, groups=C)
-        y = y.swapaxes(1, 2)  # [B, C, T]
-        y = y[..., self.pad_left : -self.pad_right]
+        y = y[:, self.pad_left : -self.pad_right,:]
         return y
 
 
@@ -143,10 +139,10 @@ class LowPassFilter1d(nn.Module):
         self.padding = padding
         self.padding_mode = padding_mode
         self.filter: mx.array = kaiser_sinc_filter1d(cutoff, half_width, kernel_size)
+        self.freeze(keys=["filter"])
 
-    # Input [B, C, T]
+    # Input [B, T, C]
     def __call__(self, x: mx.array) -> mx.array:
-        x = x.swapaxes(1, 2)  # [B, T, C]
         C = x.shape[-1]
 
         if self.padding:
@@ -154,7 +150,6 @@ class LowPassFilter1d(nn.Module):
         filter = self.filter.reshape(1, self.kernel_size, 1)  # [1,kernel_size, 1]
         filter = mx.broadcast_to(filter, (C, self.kernel_size, 1))  # [C, kernel_size, C/groups (=1)]
         y = mx.conv1d(x, filter, stride=self.stride, groups=C)
-        y = y.swapaxes(1, 2)  # to [B, C, T]
         return y
 
 

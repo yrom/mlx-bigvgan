@@ -338,10 +338,10 @@ def mel_spectrogram(
     """
     if not isinstance(audio, mx.array):
         audio = mx.array(audio)
-    print("audio", audio.shape)
+    #print("audio", audio.shape)
     if padding > 0:  # pad the audio
         audio = _pad(audio, padding, "reflect")
-    print("audio after pad, before stft", audio.shape)
+    #print("audio after pad, before stft", audio.shape)
 
     freqs = stft(
         audio, hanning(n_fft), n_fft=n_fft, hop_length=hop_length, center=center, pad_mode=pad_mode, onesided=True
@@ -360,7 +360,7 @@ def mel_spectrogram(
         norm=mel_norm,
         mel_scale=mel_scale,
     )
-    print("melscale_fb", melscale_fb.shape)
+    #print("melscale_fb", melscale_fb.shape)
 
     #  (T, n_freqs) dot (n_freqs, n_mels) -> (T, n_mels)
     mel_spec = magnitudes @ melscale_fb
@@ -381,5 +381,5 @@ def log_mel_spectrogram(
         audio,
         **mel_kwargs,
     )
-    log_spec = mx.maximum(mel_spec, 1e-5).log()
+    log_spec = mx.clip(mel_spec, a_min=1e-5, a_max=None).log()
     return log_spec  # [T, n_mels]

@@ -50,13 +50,12 @@ def upload_to_hub(path: str, upload_repo: str, hf_path: str):
     logging.set_verbosity_info()
 
     api = HfApi()
-    api.create_repo(repo_id=upload_repo, exist_ok=True)
+    api.create_repo(repo_id=upload_repo, exist_ok=True, private=True)
     api.upload_folder(
         folder_path=path,
         repo_id=upload_repo,
         repo_type="model",
-        multi_commits=True,
-        multi_commits_verbose=True,
+        commit_message="Upload converted model",
     )
     print(f"Upload successful, go to https://huggingface.co/{upload_repo} for details.")
 
@@ -105,8 +104,7 @@ def load_original_model(hf_repo: str) -> Tuple[SimpleNamespace, Dict[str, mx.arr
         import torch
     except ImportError:
         raise ImportError(
-            "PyTorch is required to load the original BigVGAN model. "
-            "`pip install torch` before converting the model."
+            "PyTorch is required to load the original BigVGAN model. `pip install torch` before converting the model."
         )
 
     config_file = Path(
@@ -134,12 +132,12 @@ def convert(
     hf_repo: str = "nvidia/bigvgan_v2_24khz_100band_256x",
     dtype: mx.Dtype = mx.float32,
     output_dir: Union[str, Path] = "mlx_models",
+    upload_repo: str = None,
 ):
     save_path = Path(output_dir) / hf_repo.split("/")[-1]
 
     config, origin_state_dict = load_original_model(hf_repo)
     model = BigVGAN(config)
-    #print("\n".join([k for k, _ in tree_flatten(model.parameters())]))
     new_weights: Dict[str, mx.array] = {}
     resblocks_weights: List[Tuple[str, mx.array]] = []
     for k, v in origin_state_dict.items():
@@ -160,11 +158,16 @@ def convert(
                 k = k.replace("0.bias", "bias")
 
         # re-shape weights
-        if k in ["conv_pre.weight", "conv_post.weight"]:
+        if k in ["conv_pre.weight", "conv_post.weight"] or (k.startswith("resblocks.") and k.endswith(".weight")):
+            # Conv1D weight
+            #    (out_channels, in_channels, kernel_size) -> (out_channels, kernel_size, in_channels)
             v = mx.moveaxis(v, 1, 2)
-        elif k.startswith(("ups.", "resblocks.")) and k.endswith("weight"):
+        elif k.startswith("ups.") and k.endswith("weight"):
+            # ConvTranspose1D weight
+            #    (in_channels, out_channels, kernel_size) -> (out_channels, kernel_size, in_channels)
             v = mx.moveaxis(v, 0, 2)
         elif k.endswith((".upsample.filter", ".downsample.lowpass.filter")):
+            # (1, 1, n) -> (n,)
             v = mx.reshape(v, (v.shape[-1],))
         # rename resblocks
         if k.startswith("resblocks."):
@@ -219,10 +222,16 @@ def convert(
 
     save_config(vars(config), config_path=save_path / "config.json")
     print(f"Model has been saved to {save_path}.")
-    print("To upload the model to Hugging Face hub, run:")
-    print("huggingface-cli login")
-    print("huggingface-cli repo create <your_repo_name>")
-    print(f"huggingface-cli upload --repo-type model <your_repo_name> {save_path}")
+
+    # print("huggingface-cli repo create <your_repo_name>")
+    # print(f"huggingface-cli upload --repo-type model <your_repo_name> {save_path}")
+    if upload_repo:
+        upload_to_hub(save_path, upload_repo, hf_repo)
+    else:
+        print(
+            "To upload the model after conversion:\n"
+            "python -m mlx_bigvgan.convert --upload_repo <username>/<repo_name> ..."
+        )
 
 
 def main():
@@ -251,6 +260,12 @@ def main():
         default="float32",
         choices=["float32", "bfloat16", "float16"],
     )
+    parser.add_argument(
+        "--upload_repo",
+        type=str,
+        default=None,
+        help="Hugging Face repo ID to upload the converted model. Should be in the format <username>/<repo_name>.",
+    )
     # TODO: support quantization
     # parser.add_argument(
     #     "--quantize",
@@ -258,7 +273,9 @@ def main():
     #     help="Whether to quantize the model.",
     # )
     args = parser.parse_args()
-    convert(hf_repo=args.repo_id, dtype=getattr(mx, args.dtype), output_dir=args.output_dir)
+    convert(
+        hf_repo=args.repo_id, dtype=getattr(mx, args.dtype), output_dir=args.output_dir, upload_repo=args.upload_repo
+    )
 
 
 if __name__ == "__main__":

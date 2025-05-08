@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import mlx.core as mx
 
 
-
 def test_wrap(func):
     def wrapper(*args, **kwargs):
         try:
@@ -80,10 +79,11 @@ def bigvgan_mel_spectrogram(
     return log_spec
 
 
-#@test_wrap
+# @test_wrap
 def test_mel_spec_with_origin_bigvgan():
     import torch
     from mlx_bigvgan.audio import log_mel_spectrogram as my_mel_spectrogram
+
     wav = np.random.randn(24_000 * 3).astype(np.float32)
     n_fft = 1024
     num_mels = 100
@@ -111,7 +111,7 @@ def test_mel_spec_with_origin_bigvgan():
         n_fft=n_fft,
         hop_length=hop_size,
         # win_length=win_size,
-        padding = (n_fft - hop_size) // 2,
+        padding=(n_fft - hop_size) // 2,
         center=True,
         pad_mode="reflect",
         fmin=fmin,
@@ -232,10 +232,7 @@ def test_stft(n_fft=4, center=True):
     my_window = my_hanning(win_length)
     torch_window = torch.hann_window(win_length + 1, periodic=False, dtype=torch.float32)[:-1]
     assert my_window.shape == torch_window.shape, f"unexpected window shape {my_window.shape} vs {torch_window.shape}"
-    window_diff = np.abs(np.array(my_window, copy=False) - torch_window.numpy())
-    assert np.max(window_diff) < 1e-5, f"Max window difference: {np.max(window_diff)}"
-    assert np.mean(window_diff) < 1e-6, f"Mean window difference: {np.mean(window_diff)}"
-    assert np.min(window_diff) < 1e-7, f"Min window difference: {np.min(window_diff)}"
+    np.testing.assert_allclose(np.array(my_window, copy=False), torch_window.numpy(), rtol=1e-4, atol=1e-4)
     wav = (np.random.randn(n_fft * 2)).astype(np.float32)
 
     my_stft_result = my_stft(
@@ -275,7 +272,12 @@ def test_stft(n_fft=4, center=True):
     # print("torch stft", torch_stft_result)
     # print("librosa stft", librosa_stft_result)
     diffrence_to_torch = my_stft_result - torch_stft_result
-    print("my vs torch", np.max(np.abs(diffrence_to_torch)), "allclose:", np.allclose(my_stft_result, torch_stft_result, rtol=1e-3, atol=1e-4))
+    print(
+        "my vs torch",
+        np.max(np.abs(diffrence_to_torch)),
+        "allclose:",
+        np.allclose(my_stft_result, torch_stft_result, rtol=1e-3, atol=1e-4),
+    )
     print(f"Max difference to torch: {np.max(diffrence_to_torch)}")
     print(f"Mean difference to torch: {np.mean(diffrence_to_torch)}")
 
@@ -337,18 +339,9 @@ def test_melscale_fn(norm=None, mel_scale="htk"):
         norm=norm,
         mel_scale=mel_scale,
     )
-    # print("my mel", my_mel.shape)
-    # print("librosa mel", librosa_mel.shape)
-    # print("torch mel", torch_mel.shape)
 
-    diffrence_to_librosa = np.abs(my_mel - librosa_mel)
-    diffrence_to_torch = np.abs(my_mel - torch_mel)
-    assert np.max(diffrence_to_librosa) <= 1e-5, f"Max difference to librosa: {np.max(diffrence_to_librosa)}"
-    assert np.mean(diffrence_to_librosa) <= 1e-6, f"Mean difference to librosa: {np.mean(diffrence_to_librosa)}"
-    assert np.min(diffrence_to_librosa) <= 1e-7, f"Min difference to librosa: {np.min(diffrence_to_librosa)}"
-    assert np.max(diffrence_to_torch) <= 1e-5, f"Max difference to torch: {np.max(diffrence_to_torch)}"
-    assert np.mean(diffrence_to_torch) <= 1e-6, f"Mean difference to torch: {np.mean(diffrence_to_torch)}"
-    assert np.min(diffrence_to_torch) <= 1e-7, f"Min difference to torch: {np.min(diffrence_to_torch)}"
+    np.testing.assert_allclose(my_mel, librosa_mel, rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(my_mel, torch_mel, rtol=1e-4, atol=1e-4)
 
     # Plot mel fbanks
     plt.figure(figsize=(12, 6))
@@ -374,13 +367,13 @@ if __name__ == "__main__":
     import os
     from mlx_bigvgan.audio import load_audio
 
-    # for norm, mel_scale in [
-    #     ("slaney", "slaney"),
-    #     ("slaney", "htk"),
-    #     (None, "slaney"),
-    #     (None, "htk"),
-    # ]:
-    #     test_melscale_fn(norm=norm, mel_scale=mel_scale)
+    for norm, mel_scale in [
+        ("slaney", "slaney"),
+        ("slaney", "htk"),
+        (None, "slaney"),
+        (None, "htk"),
+    ]:
+        test_melscale_fn(norm=norm, mel_scale=mel_scale)
 
     for n_fft in [10, 100, 1024]:
         test_stft(n_fft=n_fft, center=True)

@@ -55,7 +55,7 @@ class BigVGAN(nn.Module):
             config (ModelConfig | SimpleNamespace): Configuration object containing model parameters.
         """
         super().__init__()
-
+        self.config = config
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
 
@@ -109,18 +109,16 @@ class BigVGAN(nn.Module):
 
     def __call__(self, x: mx.array) -> mx.array:
         """
-        x: [B, C, T]
-        Returns: [B, 1, T]
+        x: [B, T, C_mels]
+        Returns: [B, T, 1]
         """
         # Pre-conv
         x = self.conv_pre(x)
-
         for i, upsample in enumerate(self.ups):
             # Upsampling
             x = upsample(x)
             # AMP blocks (num_kernels per upsampled layer)
             ampblocks = self.resblocks[i * self.num_kernels : (i + 1) * self.num_kernels]
-
             y = ampblocks[0](x)
             for resblock in ampblocks[1:]:
                 y += resblock(x)
@@ -174,7 +172,7 @@ class BigVGAN(nn.Module):
 
 
 def get_padding(kernel_size, dilation=1):
-    return int((kernel_size * dilation - dilation) // 2)
+    return (kernel_size * dilation - dilation) // 2
 
 
 class AMPBlock1(nn.Module):
@@ -219,7 +217,7 @@ class AMPBlock1(nn.Module):
                     kernel_size,
                     stride=1,
                     dilation=d,
-                    padding=get_padding(kernel_size, 1),
+                    padding=get_padding(kernel_size, d),
                 ),
                 Activation1d(
                     activation=activation_class(channels, alpha_logscale=snake_logscale),
@@ -288,7 +286,7 @@ class AMPBlock2(nn.Module):
                     kernel_size,
                     stride=1,
                     dilation=d,
-                    padding=get_padding(kernel_size, 1),
+                    padding=get_padding(kernel_size, d),
                 ),
             )
             for d in dilation

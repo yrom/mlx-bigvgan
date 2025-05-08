@@ -1,11 +1,12 @@
 import mlx.core as mx
 import mlx.nn as nn
 
+
 class Snake(nn.Module):
     """
     Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
+        - Input: (B, T, C)
+        - Output: (B, T, C), same shape as the input
     References:
         - This activation function is from this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
         https://arxiv.org/abs/2006.08195
@@ -26,8 +27,8 @@ class Snake(nn.Module):
         Applies the function to the input elementwise.
         Snake ∶= x + 1/a * sin^2 (xa)
         """
-        # Line up with x to [B, C, T]
-        alpha = self.alpha.reshape(1, self.channels, 1)
+        # Line up with x to [B, T, C]
+        alpha = self.alpha.reshape(1, 1, self.channels)
         if self.alpha_logscale:
             alpha = mx.exp(alpha)
 
@@ -40,8 +41,8 @@ class Snake(nn.Module):
 class SnakeBeta(nn.Module):
     """
     Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
+        - Input: (B, T, C)
+        - Output: (B, T, C), same shape as the input
     """
 
     def __init__(self, channels: int, alpha_logscale: bool = False):
@@ -61,9 +62,9 @@ class SnakeBeta(nn.Module):
         Applies the function to the input elementwise.
         SnakeBeta ∶= x + 1/b * sin^2 (xa)
         """
-        # Line up with x to [B, C, T]
-        alpha = self.alpha.reshape(1, self.channels, 1)
-        beta = self.beta.reshape(1, self.channels, 1)
+        # Line up with x to [B, T, C]
+        alpha = self.alpha.reshape(1, 1, self.channels)
+        beta = self.beta.reshape(1, 1, self.channels)
         if self.alpha_logscale:
             alpha = mx.exp(alpha)
             beta = mx.exp(beta)
