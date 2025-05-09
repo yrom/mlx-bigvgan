@@ -11,16 +11,9 @@ An MLX-adapted implementation of [BigVGAN](https://github.com/NVIDIA/BigVGAN).
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/mlx-BigVGAN.git
-   cd mlx-BigVGAN
-   ```
-
-2. Install dependencies:
-   ```bash
-   uv sync --no-dev
-   ```
+```bash
+pip install mlx-bigvgan
+```
 
 ## Usage
 
