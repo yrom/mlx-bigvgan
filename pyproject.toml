@@ -1,6 +1,6 @@
 [project]
 name = "mlx-bigvgan"
-version = "0.1.0"
+version = "0.1.1"
 description = "MLX implementation of BigVGAN"
 readme = "README.md"
 license = { text = "MIT" }
@@ -11,7 +11,7 @@ classifiers = [
     "Operating System :: MacOS"
 ]
 authors = [
-    { name = "Yrom", email = "yrom@qq.com" }
+    { name = "Yrom" }
 ]
 requires-python = ">=3.11"
 dependencies = [
@@ -20,6 +20,9 @@ dependencies = [
     "huggingface-hub",
     "soundfile",
 ]
+[project.urls]
+Repository = "https://github.com/yrom/mlx-bigvgan"
+Issues = "https://github.com/yrom/mlx-bigvgan/issues"
 
 [project.optional-dependencies]
 test = ["librosa","torchaudio","torch", "matplotlib"]
