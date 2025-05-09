@@ -7,7 +7,8 @@ license = { text = "MIT" }
 keywords = ["MLX", "BigVGAN"]
 classifiers = [
     "Programming Language :: Python :: 3.11",
-    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS"
 ]
 authors = [
     { name = "Yrom", email = "yrom@qq.com" }
@@ -32,4 +33,5 @@ dev = [
     "torchaudio>=2.0.1",
     "librosa>=0.10.0",
     "matplotlib",
+    "ruff>=0.11.6",
 ]
