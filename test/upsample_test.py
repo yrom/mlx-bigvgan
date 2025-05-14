@@ -11,7 +11,7 @@ orig_sin = mx.sin(t) + mx.sin(t * 2)
 real_up_sin = mx.sin(tt) + mx.sin(tt * 2)
 
 upsample = UpSample1d(ratio)
-up_sin = (upsample(orig_sin.reshape(1, 1, T))).reshape(T * ratio)
+up_sin = (upsample(orig_sin.reshape(1, T, 1))).reshape(T * ratio)
 
 plt.figure(figsize=(7, 5))
 plt.suptitle(f"upsample x{ratio}")

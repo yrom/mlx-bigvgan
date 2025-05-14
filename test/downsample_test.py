@@ -11,7 +11,7 @@ tt = mx.arange(T // ratio) / (100.0 / ratio) * mx.pi
 orig_sin = mx.sin(t) + mx.sin(t * 2)
 real_down_sin = mx.sin(tt) + mx.sin(tt * 2)
 downsample = DownSample1d(ratio)
-down_sin = downsample(orig_sin.reshape(1, 1, T)).reshape(T // ratio)
+down_sin = downsample(orig_sin.reshape(1, T, T)).reshape(T // ratio)
 
 plt.figure(figsize=(7, 5))
 plt.suptitle(f"downsample /{ratio}")
