@@ -136,11 +136,14 @@ class BigVGAN(nn.Module):
         cls,
         path_or_repo: str,
         local_files_only: bool = False,
+        use_precise_ops: bool = False,
     ) -> "BigVGAN":
         """
         Load a pretrained BigVGAN model from a local path or Hugging Face Hub.
         Args:
             path_or_repo (str): e.g. wryom/bigvgan_v2_24khz_100band_256x
+            use_precise_ops (bool): Opt-in polyphase/channel-padded inference operators.
+                Apply after loading; does not change the global MLX precision policy.
         """
         from huggingface_hub import snapshot_download
 
@@ -168,6 +171,10 @@ class BigVGAN(nn.Module):
         model = BigVGAN(config)
         model.load_weights(str(model_file))
         model.eval()
+        if use_precise_ops:
+            from .precision import apply_precise_operators
+
+            apply_precise_operators(model)
         return model
 
 
